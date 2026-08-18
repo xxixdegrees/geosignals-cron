@@ -1,0 +1,109 @@
+name: Update USGS feed (public runner)
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-usgs-feed
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private geosignals repo
+        uses: actions/checkout@v5
+        with:
+          repository: xxixdegrees/geosignals
+          token: ${{ secrets.GEOSIGNALS_WRITE_TOKEN }}
+          path: geosignals
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install forecast dependencies
+        working-directory: geosignals
+        run: pip install -r requirements.txt
+
+      - name: Preserve previous feed
+        working-directory: geosignals
+        run: cp data/live_events.json "$RUNNER_TEMP/live_events_before.json"
+
+      - name: Refresh, commit, and push without conflicts
+        working-directory: geosignals
+        env:
+          GH_TOKEN: ${{ secrets.GEOSIGNALS_WRITE_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+
+            python update_usgs_feed.py
+            python build_adaptive_preview.py
+            python update_shadow_learning.py
+            python create_dense_watch_alert.py || true
+
+            if git diff --quiet -- data/live_events.json public/adaptive-preview-data.json data/dense_watch_state.json data/shadow_learning_observations.json data/shadow_learning_model.json; then
+              echo "No M5.5+ change."
+              exit 0
+            fi
+
+            git add data/live_events.json public/adaptive-preview-data.json data/dense_watch_state.json data/shadow_learning_observations.json data/shadow_learning_model.json
+            git commit -m "Update USGS M5.5+ feed"
+
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+
+            echo "Push attempt ${attempt} failed; rebuilding from latest main."
+            sleep $((attempt * 5))
+          done
+
+          echo "Unable to push refreshed feed after 3 attempts."
+          exit 1
+
+      - name: Build earthquake and Forecast Area alert
+        id: alert
+        shell: bash
+        working-directory: geosignals
+        run: |
+          if python create_github_alert.py "$RUNNER_TEMP/live_events_before.json" data/live_events.json; then
+            echo "has_new_event=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_new_event=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub email notification
+        if: steps.alert.outputs.has_new_event == 'true'
+        working-directory: geosignals
+        env:
+          GH_TOKEN: ${{ secrets.GEOSIGNALS_WRITE_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "xxixdegrees/geosignals" \
+            --title "$(cat alert_title.txt)" \
+            --body-file alert.md \
+            --assignee xxixdegrees
+
+      - name: Create repeated-density email notification
+        if: hashFiles('geosignals/dense_watch_alert.md') != ''
+        working-directory: geosignals
+        env:
+          GH_TOKEN: ${{ secrets.GEOSIGNALS_WRITE_TOKEN }}
+        run: |
+          if [ -s dense_watch_alert.md ]; then
+            gh issue create \
+              --repo "xxixdegrees/geosignals" \
+              --title "$(cat dense_watch_alert_title.txt)" \
+              --body-file dense_watch_alert.md \
+              --assignee xxixdegrees
+          fi
