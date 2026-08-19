@@ -82,28 +82,26 @@ jobs:
             echo "has_new_event=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create GitHub email notification
+      - name: Trigger event notification in geosignals
         if: steps.alert.outputs.has_new_event == 'true'
         working-directory: geosignals
         env:
           GH_TOKEN: ${{ secrets.GEOSIGNALS_WRITE_TOKEN }}
         run: |
-          gh issue create \
-            --repo "xxixdegrees/geosignals" \
-            --title "$(cat alert_title.txt)" \
-            --body-file alert.md \
-            --assignee xxixdegrees
+          gh api repos/xxixdegrees/geosignals/dispatches \
+            -f event_type=usgs-new-event \
+            -f "client_payload[title]=$(cat alert_title.txt)" \
+            -f "client_payload[body]=$(cat alert.md)"
 
-      - name: Create repeated-density email notification
+      - name: Trigger dense-watch notification in geosignals
         if: hashFiles('geosignals/dense_watch_alert.md') != ''
         working-directory: geosignals
         env:
           GH_TOKEN: ${{ secrets.GEOSIGNALS_WRITE_TOKEN }}
         run: |
           if [ -s dense_watch_alert.md ]; then
-            gh issue create \
-              --repo "xxixdegrees/geosignals" \
-              --title "$(cat dense_watch_alert_title.txt)" \
-              --body-file dense_watch_alert.md \
-              --assignee xxixdegrees
+            gh api repos/xxixdegrees/geosignals/dispatches \
+              -f event_type=usgs-dense-watch \
+              -f "client_payload[title]=$(cat dense_watch_alert_title.txt)" \
+              -f "client_payload[body]=$(cat dense_watch_alert.md)"
           fi
