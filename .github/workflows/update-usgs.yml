@@ -52,12 +52,13 @@ jobs:
             python update_shadow_learning.py
             python create_dense_watch_alert.py || true
 
-            if git diff --quiet -- data/live_events.json public/adaptive-preview-data.json data/dense_watch_state.json data/shadow_learning_observations.json data/shadow_learning_model.json; then
+            # Stage first so newly created files count as changes.
+            git add data/live_events.json public/adaptive-preview-data.json data/dense_watch_state.json data/shadow_learning_observations.json data/shadow_learning_model.json data/frame_cache.json public/adaptive-outcomes.json
+            if git diff --cached --quiet; then
               echo "No M5.5+ change."
               exit 0
             fi
 
-            git add data/live_events.json public/adaptive-preview-data.json data/dense_watch_state.json data/shadow_learning_observations.json data/shadow_learning_model.json
             git commit -m "Update USGS M5.5+ feed"
 
             if git push origin HEAD:main; then
