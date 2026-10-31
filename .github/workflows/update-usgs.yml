@@ -51,9 +51,10 @@ jobs:
             python build_adaptive_preview.py
             python update_shadow_learning.py
             python create_dense_watch_alert.py || true
+            python create_area_watch_alert.py || true
 
             # Stage first so newly created files count as changes.
-            git add data/live_events.json public/adaptive-preview-data.json data/dense_watch_state.json data/shadow_learning_observations.json data/shadow_learning_model.json data/frame_cache.json public/adaptive-outcomes.json
+            git add data/live_events.json public/adaptive-preview-data.json data/dense_watch_state.json data/area_watch_state.json data/shadow_learning_observations.json data/shadow_learning_model.json data/frame_cache.json public/adaptive-outcomes.json
             if git diff --cached --quiet; then
               echo "No M5.5+ change."
               exit 0
@@ -105,4 +106,14 @@ jobs:
               -f event_type=usgs-dense-watch \
               -f "client_payload[title]=$(cat dense_watch_alert_title.txt)" \
               -f "client_payload[body]=$(cat dense_watch_alert.md)"
+          fi
+
+      - name: Trigger Forecast Area watch notification in geosignals
+        if: hashFiles('geosignals/area_watch_alert.md') != ''
+        working-directory: geosignals
+        env:
+          GH_TOKEN: ${{ secrets.GEOSIGNALS_WRITE_TOKEN }}
+        run: |
+          if [ -s area_watch_alert.md ]; then
+            gh api repos/xxixdegrees/geosignals/dispatches -f event_type=usgs-area-watch -f "client_payload[title]=$(cat area_watch_alert_title.txt)" -f "client_payload[body]=$(cat area_watch_alert.md)"
           fi
