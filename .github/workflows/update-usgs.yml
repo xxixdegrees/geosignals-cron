@@ -52,9 +52,10 @@ jobs:
             python update_shadow_learning.py
             python create_dense_watch_alert.py || true
             python create_area_watch_alert.py || true
+            python update_ao_density.py || true
 
             # Stage first so newly created files count as changes.
-            git add data/live_events.json public/adaptive-preview-data.json data/dense_watch_state.json data/area_watch_state.json data/shadow_learning_observations.json data/shadow_learning_model.json data/frame_cache.json public/adaptive-outcomes.json
+            git add data/live_events.json public/adaptive-preview-data.json data/dense_watch_state.json data/area_watch_state.json data/ao_event_counts.json data/ao_event_density.json data/shadow_learning_observations.json data/shadow_learning_model.json data/frame_cache.json public/adaptive-outcomes.json
             if git diff --cached --quiet; then
               echo "No M5.5+ change."
               exit 0
