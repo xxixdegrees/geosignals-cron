@@ -36,7 +36,9 @@ jobs:
         working-directory: geosignals
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: python wave/update_data.py
+        run: |
+          python wave/update_data.py
+          python wave/gdelt.py 3
 
       - name: Build waves
         working-directory: geosignals
