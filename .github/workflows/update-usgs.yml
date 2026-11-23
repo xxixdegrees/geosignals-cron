@@ -50,7 +50,6 @@ jobs:
             python update_usgs_feed.py
             python build_adaptive_preview.py
             python update_shadow_learning.py
-            python create_dense_watch_alert.py || true
             python create_area_watch_alert.py || true
             python update_ao_density.py || true
 
