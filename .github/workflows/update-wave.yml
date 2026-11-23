@@ -51,7 +51,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/wave.json wave/data
+          git add public/wave.json public/grid.json wave/data
           if git diff --cached --quiet; then echo "No change."; exit 0; fi
           git commit -m "Update area wave"
           for attempt in 1 2 3; do
