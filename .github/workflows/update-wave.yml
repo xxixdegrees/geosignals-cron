@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: '23 21 * * *'   # every day 21:23 UTC (06:23 JST)
   workflow_dispatch:
+  push:
+    paths: ['.github/workflows/update-wave.yml']   # runs once right after this file changes
 
 permissions:
   contents: read
@@ -15,50 +17,77 @@ concurrency:
 jobs:
   wave:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 240   # the strict calculation takes about 1-2 hours
     steps:
       - name: Checkout private geosignals repo
         uses: actions/checkout@v5
         with:
           repository: xxixdegrees/geosignals
           token: ${{ secrets.GEOSIGNALS_WRITE_TOKEN }}
-          path: geosignals
+          path: gsrw
+
+      - name: Checkout the state files of the strict calculation
+        uses: actions/checkout@v5
+        with:
+          repository: xxixdegrees/geosignals
+          ref: wave-state
+          token: ${{ secrets.GEOSIGNALS_WRITE_TOKEN }}
+          path: state
 
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
       - name: Install dependencies
-        working-directory: geosignals
-        run: pip install -r requirements.txt numpy pandas scikit-learn
+        working-directory: gsrw
+        run: pip install -r requirements.txt numpy pandas scikit-learn scipy
 
       - name: Refresh event data
-        working-directory: geosignals
+        working-directory: gsrw
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           python wave/update_data.py
           python wave/gdelt.py 3
 
-      - name: Build waves
-        working-directory: geosignals
+      - name: Prepare the work folder
         run: |
-          python wave/events_wave.py
-          python wave/wave_export.py
+          cp -r gsrw/wave/strict/. .
+          for f in state/*.gz; do gunzip -c "$f" > "$(basename "${f%.gz}")"; done
+          cp state/gapf.json state/st_ev.json .
+          cp state/fitdaily.pkl gsrw/fitdaily.pkl
+          mkdir -p ext/ucdp
+          gunzip -c state/ext/GEDEvent_v26_1.csv.gz > ext/ucdp/GEDEvent_v26_1.csv
+          gunzip -c state/ext/cand26.csv.gz > ext/ucdp/cand26.csv
+          for f in state/ext/wave_*.json.gz; do gunzip -c "$f" > "ext/$(basename "${f%.gz}")"; done
+          cp state/ext/war.json ext/
 
-      - name: Commit and push
-        working-directory: geosignals
+      - name: Build the waves (every value from records before that day only)
+        run: bash run_daily.sh
+
+      - name: Commit and push the site files
+        working-directory: gsrw
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # 2026-11-27: public/wave.json now comes from the strict day-by-day calculation (pushed separately every morning after this job);
-          # this job keeps the event data and the list grid only
-          git checkout -- public/wave.json
-          git add public/grid.json wave/data
-          if git diff --cached --quiet; then echo "No change."; exit 0; fi
-          git commit -m "Update area wave"
-          for attempt in 1 2 3; do
-            git pull --rebase origin main && git push origin HEAD:main && exit 0
-            sleep $((attempt * 10))
-          done
-          exit 1
+          git add public/wave.json public/grid.json wave/data data/list_params.json data/list_curve.json
+          if git diff --cached --quiet; then echo "No change."; else
+            git commit -m "Update area wave"
+            ok=0
+            for attempt in 1 2 3; do
+              if git pull --rebase origin main && git push origin HEAD:main; then ok=1; break; fi
+              sleep $((attempt * 10))
+            done
+            [ "$ok" = 1 ]
+          fi
+
+      - name: Save the state files for tomorrow
+        run: |
+          for f in basef_0.jsonl basef_1.jsonl hexD_0.jsonl hexD_1.jsonl hexDf_0.jsonl hexDf_1.jsonl rankS7.json; do gzip -c -6 "$f" > "state/$f.gz"; done
+          cp gsrw/fitdaily.pkl state/fitdaily.pkl
+          cd state
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --amend -m "Area wave state" -q
+          git push -f -q origin HEAD:wave-state
