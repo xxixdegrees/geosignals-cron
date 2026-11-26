@@ -17,7 +17,7 @@ concurrency:
 jobs:
   wave:
     runs-on: ubuntu-latest
-    timeout-minutes: 240   # the strict calculation takes about 1-2 hours (stars per line from 2026-11-27)
+    timeout-minutes: 240   # the strict calculation takes about 1-2 hours (stars per line, strength and growth from 2026-11-27)
     steps:
       - name: Checkout private geosignals repo
         uses: actions/checkout@v5
