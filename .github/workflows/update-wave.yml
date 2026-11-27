@@ -85,8 +85,7 @@ jobs:
         run: |
           for f in basef_0.jsonl basef_1.jsonl hexD_0.jsonl hexD_1.jsonl hexDf_0.jsonl hexDf_1.jsonl rankS7.json; do gzip -c -6 "$f" > "state/$f.gz"; done
           cp gsrw/fitdaily.pkl state/fitdaily.pkl
-          printf '{"git":{"deploymentEnabled":false}}
-' > state/vercel.json   # the state branch is not a site: no Vercel deployment
+          echo '{"git":{"deploymentEnabled":false}}' > state/vercel.json   # the state branch is not a site: no Vercel deployment
           cd state
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
